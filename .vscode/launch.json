@@ -1,0 +1,19 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run Web App",
+      "request": "launch",
+      "type": "dart",
+      "args": ["-d", "chrome", "--web-port=8080"]
+    },
+    {
+      "name": "Run Printer Extension (Desktop)",
+      "request": "launch",
+      "type": "dart",
+      "program": "printer_extension/lib/main.dart",
+      "cwd": "${workspaceFolder}/printer_extension",
+      "args": ["-d", "windows"]
+    }
+  ]
+}

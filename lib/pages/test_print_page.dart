@@ -12,7 +12,8 @@ class TestPrintPage extends StatefulWidget {
 
 class _TestPrintPageState extends State<TestPrintPage> {
   final TextEditingController _textController = TextEditingController();
-  bool _isPrinting = false;
+  bool _isPrintingKasir = false;
+  bool _isPrintingDapur = false;
 
   @override
   void dispose() {
@@ -20,7 +21,7 @@ class _TestPrintPageState extends State<TestPrintPage> {
     super.dispose();
   }
 
-  Future<void> _handlePrint() async {
+  Future<void> _handlePrint(String role) async {
     final text = _textController.text.trim();
     if (text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -29,35 +30,92 @@ class _TestPrintPageState extends State<TestPrintPage> {
       return;
     }
 
-    if (widget.printerService.activePrinter == null) {
+    if (role == 'kasir' && widget.printerService.receiptPrinter == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Silakan pilih printer terlebih dahulu di halaman sebelah')),
+        const SnackBar(content: Text('Printer Kasir belum dipilih')),
+      );
+      return;
+    }
+    
+    if (role == 'dapur' && widget.printerService.kitchenPrinter == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Printer Dapur belum dipilih')),
       );
       return;
     }
 
     setState(() {
-      _isPrinting = true;
+      if (role == 'kasir') {
+        _isPrintingKasir = true;
+      } else {
+        _isPrintingDapur = true;
+      }
     });
 
-    final success = await widget.printerService.printText(text);
+    final success = await widget.printerService.printText(text, role: role);
     
     if (mounted) {
       setState(() {
-        _isPrinting = false;
+        if (role == 'kasir') {
+          _isPrintingKasir = false;
+        } else {
+          _isPrintingDapur = false;
+        }
       });
 
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Berhasil mengirim perintah cetak!')),
+          SnackBar(content: Text('Berhasil mengirim cetak ke $role!')),
         );
-        _textController.clear();
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Gagal mencetak. Periksa koneksi printer Anda.')),
+          SnackBar(content: Text('Gagal mencetak ke $role. Periksa koneksi.')),
         );
       }
     }
+  }
+
+  Widget _buildStatusIndicator(String title, bool isReady, String? printerName) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isReady ? Colors.green.shade50 : Colors.red.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: isReady ? Colors.green.shade200 : Colors.red.shade200,
+        )
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isReady ? Icons.check_circle : Icons.warning,
+            color: isReady ? Colors.green : Colors.red,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    color: isReady ? Colors.green.shade900 : Colors.red.shade900,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  isReady ? 'Siap: $printerName' : 'Belum dihubungkan',
+                  style: TextStyle(
+                    color: isReady ? Colors.green.shade900 : Colors.red.shade900,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -66,7 +124,7 @@ class _TestPrintPageState extends State<TestPrintPage> {
       appBar: AppBar(
         title: const Text('Test Print'),
       ),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -75,36 +133,15 @@ class _TestPrintPageState extends State<TestPrintPage> {
             ListenableBuilder(
               listenable: widget.printerService,
               builder: (context, child) {
-                final hasPrinter = widget.printerService.activePrinter != null;
-                return Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: hasPrinter ? Colors.green.shade50 : Colors.red.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: hasPrinter ? Colors.green.shade200 : Colors.red.shade200,
-                    )
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        hasPrinter ? Icons.check_circle : Icons.warning,
-                        color: hasPrinter ? Colors.green : Colors.red,
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          hasPrinter 
-                              ? 'Printer siap: ${widget.printerService.activePrinter!.name}'
-                              : 'Printer belum dipilih',
-                          style: TextStyle(
-                            color: hasPrinter ? Colors.green.shade900 : Colors.red.shade900,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+                final kasirPrinter = widget.printerService.receiptPrinter;
+                final dapurPrinter = widget.printerService.kitchenPrinter;
+                
+                return Column(
+                  children: [
+                    _buildStatusIndicator('Printer Kasir', kasirPrinter != null, kasirPrinter?.name),
+                    const SizedBox(height: 12),
+                    _buildStatusIndicator('Printer Dapur', dapurPrinter != null, dapurPrinter?.name),
+                  ],
                 );
               }
             ),
@@ -119,18 +156,34 @@ class _TestPrintPageState extends State<TestPrintPage> {
               maxLines: 3,
             ),
             const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: _isPrinting ? null : _handlePrint,
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-              ),
-              child: _isPrinting 
-                  ? const SizedBox(
-                      width: 20, 
-                      height: 20, 
-                      child: CircularProgressIndicator(strokeWidth: 2)
-                    )
-                  : const Text('Print Sekarang', style: TextStyle(fontSize: 16)),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: _isPrintingKasir ? null : () => _handlePrint('kasir'),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                    child: _isPrintingKasir 
+                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Text('Print Kasir'),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: _isPrintingDapur ? null : () => _handlePrint('dapur'),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      backgroundColor: Colors.orange.shade100,
+                      foregroundColor: Colors.orange.shade900,
+                    ),
+                    child: _isPrintingDapur 
+                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Text('Print Dapur'),
+                  ),
+                ),
+              ],
             ),
           ],
         ),

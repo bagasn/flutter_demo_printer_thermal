@@ -1,5 +1,4 @@
 import 'dart:convert';
-
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:thermal_printer_flutter/thermal_printer_flutter.dart';
@@ -7,62 +6,71 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 
 class PrinterService extends ChangeNotifier {
   final ThermalPrinterFlutter _printer = ThermalPrinterFlutter();
-  Printer? _activePrinter;
-  bool _isConnecting = false;
+  
+  // Map of active printers by role (e.g. 'kasir', 'dapur')
+  final Map<String, Printer> _activePrinters = {};
+  
+  // Track connection status per role to show loading spinner
+  final Map<String, bool> _connectingState = {};
+
+  Printer? get receiptPrinter => _activePrinters['kasir'];
+  Printer? get kitchenPrinter => _activePrinters['dapur'];
+
+  bool isConnecting(String role) => _connectingState[role] ?? false;
+  
+  // Shared token for network bridge
   String? _bridgeToken;
 
-  Printer? get activePrinter => _activePrinter;
-  bool get isConnecting => _isConnecting;
-
-  static const String _prefPrinterTypeKey = 'last_printer_type';
-  static const String _prefPrinterNameKey = 'last_printer_name';
-  static const String _prefPrinterIpKey = 'last_printer_ip';
-  static const String _prefBridgeTokenKey = 'last_bridge_token';
+  static const List<String> _roles = ['kasir', 'dapur'];
 
   PrinterService() {
     _initAutoConnect();
   }
 
+  void _setConnecting(String role, bool status) {
+    _connectingState[role] = status;
+    notifyListeners();
+  }
+
   Future<void> _initAutoConnect() async {
     final prefs = await SharedPreferences.getInstance();
-    final lastTypeStr = prefs.getString(_prefPrinterTypeKey);
-    final lastName = prefs.getString(_prefPrinterNameKey);
-    final lastIp = prefs.getString(_prefPrinterIpKey);
-    _bridgeToken = prefs.getString(_prefBridgeTokenKey);
+    _bridgeToken = prefs.getString('last_bridge_token');
 
-    if (lastTypeStr != null && lastName != null) {
-      if (lastTypeStr == 'network' && lastIp != null) {
-        _activePrinter = Printer(
-          type: PrinterType.network,
-          name: lastName,
-          ip: lastIp,
-          port: '9100',
-        );
-        notifyListeners();
-        return;
-      }
+    for (var role in _roles) {
+      final lastTypeStr = prefs.getString('last_printer_type_$role');
+      final lastName = prefs.getString('last_printer_name_$role');
+      final lastIp = prefs.getString('last_printer_ip_$role');
 
-      PrinterType type = lastTypeStr == 'usb'
-          ? PrinterType.usb
-          : PrinterType.bluetooth;
-      try {
-        final printers = await _printer.getPrinters(printerType: type);
-        final matchingPrinter = printers
-            .where((p) => p.name == lastName)
-            .firstOrNull;
-        if (matchingPrinter != null) {
-          _activePrinter = matchingPrinter;
+      if (lastTypeStr != null && lastName != null) {
+        if (lastTypeStr == 'network' && lastIp != null) {
+          _activePrinters[role] = Printer(
+            type: PrinterType.network,
+            name: lastName,
+            ip: lastIp,
+            port: '9100',
+          );
           notifyListeners();
+          continue;
         }
-      } catch (e) {
-        debugPrint("Auto-connect failed: $e");
+
+        PrinterType type = lastTypeStr == 'usb' ? PrinterType.usb : PrinterType.bluetooth;
+        try {
+          final printers = await _printer.getPrinters(printerType: type);
+          final matchingPrinter = printers.where((p) => p.name == lastName).firstOrNull;
+          if (matchingPrinter != null) {
+            _activePrinters[role] = matchingPrinter;
+            notifyListeners();
+          }
+        } catch (e) {
+          debugPrint("Auto-connect failed for $role: $e");
+        }
       }
     }
   }
 
-  Future<void> _savePrinter(Printer printer, {String? ip}) async {
+  Future<void> _savePrinter(String role, Printer printer, {String? ip}) async {
     final prefs = await SharedPreferences.getInstance();
-
+    
     String typeStr;
     if (printer.type == PrinterType.usb) {
       typeStr = 'usb';
@@ -72,113 +80,106 @@ class PrinterService extends ChangeNotifier {
       typeStr = 'network';
     }
 
-    await prefs.setString(_prefPrinterTypeKey, typeStr);
-    await prefs.setString(_prefPrinterNameKey, printer.name);
-
+    await prefs.setString('last_printer_type_$role', typeStr);
+    await prefs.setString('last_printer_name_$role', printer.name);
+    
     if (ip != null) {
-      await prefs.setString(_prefPrinterIpKey, ip);
+      await prefs.setString('last_printer_ip_$role', ip);
     }
-
+    
     if (_bridgeToken != null) {
-      await prefs.setString(_prefBridgeTokenKey, _bridgeToken!);
+      await prefs.setString('last_bridge_token', _bridgeToken!);
     }
   }
 
-  Future<void> _clearSavedPrinter() async {
+  Future<void> _clearSavedPrinter(String role) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_prefPrinterTypeKey);
-    await prefs.remove(_prefPrinterNameKey);
-    await prefs.remove(_prefPrinterIpKey);
+    await prefs.remove('last_printer_type_$role');
+    await prefs.remove('last_printer_name_$role');
+    await prefs.remove('last_printer_ip_$role');
   }
 
-  Future<bool> selectUsbPrinter() async {
-    _isConnecting = true;
-    notifyListeners();
+  Future<bool> selectUsbPrinter(String role) async {
+    _setConnecting(role, true);
 
     try {
       if (await _printer.isWebUsbSupported()) {
-        final target = await _printer.requestPrinter(
-          printerType: PrinterType.usb,
-        );
+        final target = await _printer.requestPrinter(printerType: PrinterType.usb);
         if (target != null) {
-          _activePrinter = target;
-          await _savePrinter(target);
+          _activePrinters[role] = target;
+          await _savePrinter(role, target);
           return true;
         }
       }
     } catch (e) {
       debugPrint("Error selecting USB printer: $e");
     } finally {
-      _isConnecting = false;
-      notifyListeners();
+      _setConnecting(role, false);
     }
     return false;
   }
 
-  Future<bool> selectBluetoothPrinter() async {
-    _isConnecting = true;
-    notifyListeners();
+  Future<bool> selectBluetoothPrinter(String role) async {
+    _setConnecting(role, true);
 
     try {
       if (await _printer.isWebBluetoothSupported()) {
-        final target = await _printer.requestPrinter(
-          printerType: PrinterType.bluetooth,
-        );
+        final target = await _printer.requestPrinter(printerType: PrinterType.bluetooth);
         if (target != null) {
-          _activePrinter = target;
-          await _savePrinter(target);
+          _activePrinters[role] = target;
+          await _savePrinter(role, target);
           return true;
         }
       }
     } catch (e) {
       debugPrint("Error selecting Bluetooth printer: $e");
     } finally {
-      _isConnecting = false;
-      notifyListeners();
+      _setConnecting(role, false);
     }
     return false;
   }
 
-  Future<bool> selectNetworkPrinter(String ip, String token) async {
-    _isConnecting = true;
-    notifyListeners();
+  Future<bool> selectNetworkPrinter(String ip, String token, String role) async {
+    _setConnecting(role, true);
 
     try {
       _bridgeToken = token;
-      _activePrinter = Printer(
+      final newPrinter = Printer(
         type: PrinterType.network,
         name: 'Network ($ip)',
         ip: ip,
         port: '9100',
       );
-      await _savePrinter(_activePrinter!, ip: ip);
+      _activePrinters[role] = newPrinter;
+      await _savePrinter(role, newPrinter, ip: ip);
       return true;
     } catch (e) {
       debugPrint("Error selecting Network printer: $e");
       return false;
     } finally {
-      _isConnecting = false;
-      notifyListeners();
+      _setConnecting(role, false);
     }
   }
 
-  Future<void> disconnect() async {
-    if (_activePrinter != null) {
+  Future<void> disconnect(String role) async {
+    final printerToDisconnect = _activePrinters[role];
+    if (printerToDisconnect != null) {
       try {
-        if (_activePrinter!.type != PrinterType.network) {
-          await _printer.disconnect(printer: _activePrinter!);
+        if (printerToDisconnect.type != PrinterType.network) {
+          await _printer.disconnect(printer: printerToDisconnect);
         }
       } catch (e) {
         // Ignored
       }
-      _activePrinter = null;
-      await _clearSavedPrinter();
+      _activePrinters.remove(role);
+      await _clearSavedPrinter(role);
       notifyListeners();
     }
   }
 
-  Future<bool> printText(String text) async {
-    if (_activePrinter == null) return false;
+  Future<bool> printText(String text, {required String role}) async {
+    final targetPrinter = _activePrinters[role];
+    if (targetPrinter == null) return false;
 
     try {
       final profile = await CapabilityProfile.load();
@@ -190,10 +191,10 @@ class PrinterService extends ChangeNotifier {
         // ...generator.cut(),
       ];
 
-      if (_activePrinter!.type == PrinterType.network) {
-        return await _printViaBridge(bytes, _activePrinter!.ip!);
+      if (targetPrinter.type == PrinterType.network) {
+        return await _printViaBridge(bytes, targetPrinter.ip);
       } else {
-        await _printer.printBytes(bytes: bytes, printer: _activePrinter!);
+        await _printer.printBytes(bytes: bytes, printer: targetPrinter);
         return true;
       }
     } catch (e) {
@@ -205,17 +206,20 @@ class PrinterService extends ChangeNotifier {
   Future<bool> _printViaBridge(List<int> bytes, String targetIp) async {
     try {
       String wsUrl = 'ws://localhost:8921';
-      if (_bridgeToken != null && _bridgeToken!.isNotEmpty) {
-        wsUrl += '/?token=$_bridgeToken';
+      final token = _bridgeToken;
+      if (token != null && token.isNotEmpty) {
+        wsUrl += '/?token=$token';
       }
-
+      
       final channel = WebSocketChannel.connect(Uri.parse(wsUrl));
-
-      final payload = jsonEncode({"target": targetIp, "bytes": bytes});
+      
+      final payload = jsonEncode({
+        "target": targetIp,
+        "bytes": bytes,
+      });
 
       channel.sink.add(payload);
-
-      // Wait for success response or timeout
+      
       bool success = false;
       await for (final message in channel.stream) {
         final data = jsonDecode(message);
@@ -227,7 +231,7 @@ class PrinterService extends ChangeNotifier {
           break;
         }
       }
-
+      
       await channel.sink.close();
       return success;
     } catch (e) {

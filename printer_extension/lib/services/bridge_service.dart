@@ -11,7 +11,7 @@ class BridgeService extends ChangeNotifier {
   // Server state
   HttpServer? _server;
   bool get isRunning => _server != null;
-  
+
   final List<String> _logs = [];
   List<String> get logs => List.unmodifiable(_logs);
 
@@ -22,7 +22,10 @@ class BridgeService extends ChangeNotifier {
   String testIp = '192.168.1.100';
 
   void addLog(String message) {
-    _logs.insert(0, '${DateTime.now().toIso8601String().split('T').last.split('.').first} - $message');
+    _logs.insert(
+      0,
+      '${DateTime.now().toIso8601String().split('T').last.split('.').first} - $message',
+    );
     if (_logs.length > 50) _logs.removeLast();
     notifyListeners();
   }
@@ -54,46 +57,58 @@ class BridgeService extends ChangeNotifier {
 
     final wsHandler = webSocketHandler((webSocket, protocol) {
       addLog('Klien terhubung (Protocol: $protocol).');
-      
-      webSocket.stream.listen((message) async {
-        try {
-          final data = jsonDecode(message);
-          final targetIp = data['target'] as String;
-          final bytes = (data['bytes'] as List).cast<int>();
-          
-          addLog('Menerima perintah cetak. Meneruskan ke $targetIp...');
-          
-          final socket = await Socket.connect(targetIp, 9100, timeout: const Duration(seconds: 5));
-          socket.add(bytes);
-          await socket.flush();
-          await socket.close();
-          
-          addLog('Berhasil mencetak ke $targetIp');
-          
-          webSocket.sink.add(jsonEncode({"status": "success"}));
-        } catch (e) {
-          addLog('Error: $e');
-          webSocket.sink.add(jsonEncode({"status": "error", "message": e.toString()}));
-        }
-      }, onDone: () {
-        addLog('Klien terputus.');
-      });
+
+      webSocket.stream.listen(
+        (message) async {
+          try {
+            final data = jsonDecode(message);
+            final targetIp = data['target'] as String;
+            final bytes = (data['bytes'] as List).cast<int>();
+
+            addLog('Menerima perintah cetak. Meneruskan ke $targetIp...');
+
+            final socket = await Socket.connect(
+              targetIp,
+              9100,
+              timeout: const Duration(seconds: 5),
+            );
+            socket.add(bytes);
+            await socket.flush();
+            await socket.close();
+
+            addLog('Berhasil mencetak ke $targetIp');
+
+            webSocket.sink.add(jsonEncode({"status": "success"}));
+          } catch (e) {
+            addLog('Error: $e');
+            webSocket.sink.add(
+              jsonEncode({"status": "error", "message": e.toString()}),
+            );
+          }
+        },
+        onDone: () {
+          addLog('Klien terputus.');
+        },
+      );
     });
 
     FutureOr<Response> handler(Request request) {
       if (request.method == 'OPTIONS') {
-        return Response.ok('', headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-          'Access-Control-Allow-Headers': 'Origin, Content-Type',
-        });
+        return Response.ok(
+          '',
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Origin, Content-Type',
+          },
+        );
       }
-      
+
       if (!_validateAuth(request)) {
         addLog('Koneksi ditolak: Token tidak valid.');
         return Response.forbidden('Invalid auth token');
       }
-      
+
       return wsHandler(request);
     }
 
@@ -120,16 +135,20 @@ class BridgeService extends ChangeNotifier {
 
     addLog('Mencoba test print ke $ip:9100...');
     try {
-      final socket = await Socket.connect(ip, 9100, timeout: const Duration(seconds: 5));
-      
+      final socket = await Socket.connect(
+        ip,
+        9100,
+        timeout: const Duration(seconds: 5),
+      );
+
       final init = [27, 64];
       final textBytes = utf8.encode('TEST CONNECTION SUCCESS!\n\n\n\n');
-      final cut = [29, 86, 0]; 
-      
+      final cut = [29, 86, 0];
+
       socket.add([...init, ...textBytes, ...cut]);
       await socket.flush();
       await socket.close();
-      
+
       addLog('Test print berhasil! Koneksi TCP lancar.');
     } catch (e) {
       addLog('Test print gagal: $e');

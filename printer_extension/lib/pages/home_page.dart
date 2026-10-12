@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../services/bridge_service.dart';
 
 class BridgeHomePage extends StatefulWidget {
@@ -17,7 +18,9 @@ class _BridgeHomePageState extends State<BridgeHomePage> {
   @override
   void initState() {
     super.initState();
-    _tokenController = TextEditingController(text: widget.bridgeService.authToken);
+    _tokenController = TextEditingController(
+      text: widget.bridgeService.authToken,
+    );
     _ipController = TextEditingController(text: widget.bridgeService.testIp);
   }
 
@@ -52,32 +55,48 @@ class _BridgeHomePageState extends State<BridgeHomePage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Status Server', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      const Text(
+                        'Status Server',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                       const SizedBox(height: 8),
                       Row(
                         children: [
                           Icon(
-                            isRunning ? Icons.check_circle : Icons.stop_circle, 
+                            isRunning ? Icons.check_circle : Icons.stop_circle,
                             color: isRunning ? Colors.green : Colors.red,
                           ),
                           const SizedBox(width: 8),
                           Text(
-                            isRunning ? 'Berjalan (Port ${widget.bridgeService.port})' : 'Berhenti',
+                            isRunning
+                                ? 'Berjalan (Port ${widget.bridgeService.port})'
+                                : 'Berhenti',
                             style: const TextStyle(fontSize: 16),
                           ),
                         ],
                       ),
                       const SizedBox(height: 24),
                       const Divider(),
-                      
+
                       // Pengaturan Otentikasi
-                      const Text('Pengaturan Otentikasi', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      const Text(
+                        'Pengaturan Otentikasi',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                       SwitchListTile(
                         title: const Text('Gunakan Otentikasi Token'),
                         value: widget.bridgeService.enableAuth,
-                        onChanged: isRunning ? null : (val) {
-                          widget.bridgeService.updateEnableAuth(val);
-                        },
+                        onChanged: isRunning
+                            ? null
+                            : (val) {
+                                widget.bridgeService.updateEnableAuth(val);
+                              },
                         contentPadding: EdgeInsets.zero,
                       ),
                       if (widget.bridgeService.enableAuth)
@@ -88,28 +107,43 @@ class _BridgeHomePageState extends State<BridgeHomePage> {
                             border: OutlineInputBorder(),
                           ),
                           enabled: !isRunning,
-                          onChanged: (val) => widget.bridgeService.updateAuthToken(val),
+                          onChanged: (val) =>
+                              widget.bridgeService.updateAuthToken(val),
                         ),
-                      
+
                       const SizedBox(height: 24),
                       SizedBox(
                         width: double.infinity,
                         height: 50,
                         child: ElevatedButton(
-                          onPressed: isRunning ? widget.bridgeService.stopServer : widget.bridgeService.startServer,
+                          onPressed: isRunning
+                              ? widget.bridgeService.stopServer
+                              : widget.bridgeService.startServer,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: isRunning ? Colors.red.shade100 : Colors.green.shade100,
-                            foregroundColor: isRunning ? Colors.red.shade900 : Colors.green.shade900,
+                            backgroundColor: isRunning
+                                ? Colors.red.shade100
+                                : Colors.green.shade100,
+                            foregroundColor: isRunning
+                                ? Colors.red.shade900
+                                : Colors.green.shade900,
                           ),
-                          child: Text(isRunning ? 'Stop Server' : 'Start Server'),
+                          child: Text(
+                            isRunning ? 'Stop Server' : 'Start Server',
+                          ),
                         ),
                       ),
-                      
+
                       const SizedBox(height: 24),
                       const Divider(),
-                      
+
                       // Uji Coba Printer
-                      const Text('Test Koneksi Jaringan', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      const Text(
+                        'Test Koneksi Jaringan',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                       const SizedBox(height: 8),
                       TextField(
                         controller: _ipController,
@@ -117,7 +151,8 @@ class _BridgeHomePageState extends State<BridgeHomePage> {
                           labelText: 'IP Printer',
                           border: OutlineInputBorder(),
                         ),
-                        onChanged: (val) => widget.bridgeService.updateTestIp(val),
+                        onChanged: (val) =>
+                            widget.bridgeService.updateTestIp(val),
                       ),
                       const SizedBox(height: 12),
                       SizedBox(
@@ -132,7 +167,7 @@ class _BridgeHomePageState extends State<BridgeHomePage> {
                   ),
                 ),
               ),
-              
+
               // Bagian Kanan (Log Monitor)
               Expanded(
                 flex: 2,
@@ -141,7 +176,13 @@ class _BridgeHomePageState extends State<BridgeHomePage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Server Logs', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      const Text(
+                        'Server Logs',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                       const SizedBox(height: 12),
                       Expanded(
                         child: Container(
